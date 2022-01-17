@@ -1,0 +1,5 @@
+id=jthi.jmp.tools.get.unique.values
+name=JMP-Tools Get Unique Values
+supportJmpSE=0
+addinVersion=1
+minJmpVersion=16

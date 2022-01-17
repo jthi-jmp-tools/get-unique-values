@@ -1,0 +1,197 @@
+﻿Names Default To Here(1);
+
+//Get utility functions
+Include("bin/gui_utilities.jsl"); //or copy them directly here to make more standalone
+Include("bin/get_unique_values.jsl");
+
+//setup default settings
+default_settings = ["GUI" => ["window_title" => "Get Unique Values", "window_icon" => "XmlNodeFillOnce"]];
+//load settings from file and get "final settings"
+aa_settings = load_settings(default_settings, settings_file_name = "settings.json");
+
+//check if the table is already open
+check_open_window(aa_settings["GUI"]["window_title"]);
+//we could update list box if window is rerun...
+
+//check if any tables are open and set current datatable() as dt
+list_dt = Sort List(Get Data Table List() << get name);
+If(N items(list_dt) < 1,
+	New Window("Text to SQL IN", << modal,
+		V List Box(align("center"),
+			Panel Box("Paste text to be converted into sql in",
+				teb = Script Box("", "JSL", 500, 400),
+			),
+			Button Box("Copy as SQL in",
+				copy_to_clipboard(format_to_sql_in(teb << get text));
+			),
+			H List Box(
+				Button Box("OK",
+					copy_to_clipboard(format_to_sql_in(teb << get text));
+				),
+				Button Box("Cancel")
+			)
+		)
+	);
+	stop();
+	,
+	init_column = Try(Contains(Datatable(list_dt[1]) << get column names("Ordinal", "Nominal", "String"), (Datatable(list_dt[1]) << Get Selected Columns("String"))[1]), 0);
+);
+
+update_ui = Expr(
+	col_selection = clb << get selected;
+	table_selection = lb_dt << get selected;
+	If(N Items(table_selection) == 0,
+		Throw("No table selected!");
+	);
+	If(N Items(col_selection) > 0 & N Items(table_selection) > 0,
+		col_selection = col_selection[1];
+		type_selection = rb << get selected;
+		dt = Datatable(table_selection[1]);
+		Choose(Contains(selections, type_selection),
+		//1
+			val = get_unique_as_char_from_col(dt, col_selection, missing_selection << get);
+		,//2
+			val = get_unique_as_aa_from_col(dt, col_selection, missing_selection << get);
+		);
+		uniq_count = N Items(val);
+		row_count = N Rows(dt);
+		rows_with_val = Col Number(Column(dt, col_selection));
+		percent_missing = Round((1 - rows_with_val / row_count)*100, 2);
+		uniq_count_teb << Set Text(Char(uniq_count));
+		value_count_teb << Set Text(Char(rows_with_val));
+		missing_count_teb << Set Text(Char(row_count - rows_with_val));
+		missing_percent_teb << Set Text(Char(percent_missing) || "%");
+				
+		//tämä vaatii jonkinlaiset tarkistukset tekstikentän koolle...
+		If(uniq_count > 2000,
+			warning_teb << Set Text("\!NOver 2000 unique values\!Nshowing first 1000 and last 1000");
+			If(Contains({"Matrix", "List"}, Type(val)),
+				temp_val = {};
+				Insert Into(temp_val, Eval List({val[1::1000], Repeat({.}, 100), val[uniq_count - 1000::uniq_count]}));
+			,//aa
+				temp_val = val;
+				aa_keys = val << get keys;
+				N items(aa_keys);
+				keys_to_remove = aa_keys[1000::(uniq_count - 1000)];
+				Remove From(temp_val, keys_to_remove);
+			);
+			teb << Set Text(char(temp_aa));
+		,
+			warning_teb << Set Text("");
+			teb << set text(char(val));
+		);
+		If(Starts With(type_selection, "JSL"),
+			Try(teb << Reformat);
+		);
+	);
+);
+
+update_clb = Expr(
+	If(N Items(lb_dt << get selected) > 0,		
+		clb << Delete Box();
+		Eval(EvalExpr(pb_clb << Append(
+			clb = Col List Box(Datatable(Datatable(Expr((lb_dt << get selected)[1]))), all, max selected(1), nlines(10), << Modeling Type({"Nominal", "Ordinal"}), update_ui)),		
+		));
+	);
+);
+
+update_table_list = Expr(
+	list_dt = Sort List(Get Data Table List() << get name);
+	lb_dt << Set Items(list_dt);
+);
+
+selections = {"JSL_Char_list", "JSL_aa"};
+
+nw = New Window(aa_settings["GUI"]["window_title"], << show toolbars(0), << show menu(0),
+	<<Set Window Icon(aa_settings["GUI"]["window_icon"]),
+	V List Box(align("right"),
+		Border Box(Sides(15), H Center Box(Text Box("Get unique values from nominal and ordinal columns", << Font Color("Blue")))),
+		H List Box(
+			V List Box(align("center"),
+				Panel Box("Choose datatable",
+					Lineup Box(N Col(1),
+						lb_dt = List Box(list_dt, max selected(1), << Set Selected(1), << set script(update_clb)),
+						Button Box("Update table list", update_table_list)
+					)
+				),		
+				pb_clb = Panel Box("Select ordinal/nominal column", 
+					clb = Col List Box(Datatable(list_dt[1]), all, maxSelected(1), nlines(10), << Modeling Type({"Nominal", "Ordinal"}), update_ui)
+				),
+				Panel Box("Column info",
+					V List Box(
+						Spacer box(Size(165, 0)),
+						Lineup Box(NCol(2),
+							Text Box("Current unique count: "),
+							uniq_count_teb = Text Box("N/A"),
+							Text Box("Current value count: "),
+							value_count_teb = Text Box("N/A"),
+							Text Box("Current missing count: "),
+							missing_count_teb = Text Box("N/A"),
+							Text Box("% missing: "),
+							missing_percent_teb = Text Box("N/A");
+						)
+					)
+				)
+			),
+			V List Box(
+				H List Box(
+					Panel Box("Select type for uniques",
+						H List Box(
+							Spacer Box(Size(0, 45)),
+							rb = Radio Box(selections, update_ui)
+						)
+					),
+					Panel Box("Extra Settings",
+						Spacerbox(Size(125,0)),
+						H List Box(
+							Spacerbox(size(0,50)),
+							vlb = V List Box(
+								Lineup Box(NCol(2),
+									Text Box("Remove missing"),
+									missing_selection = Check Box({""}, <<Set(1), update_ui)
+								)
+							);
+						)
+					),
+					warning_teb = Text Box("", << Set Font Size(10), << Font Color("Red"))
+				),
+				Panel Box("Current unique values based on user selection",
+					teb = Script Box("", "JSL", 500, 400),
+				)
+			),
+			Panel Box("Actions",
+				Lineup Box(N Col(1),
+					Button Box("Clipboard - SQL char",
+						copy_to_clipboard(build_sql_from_jmp_expr(val, "character"));
+					),
+					Button Box("Clipboard - SQL num",
+						copy_to_clipboard(build_sql_from_jmp_expr(val, "numeric"));
+					), //val can be used to access values...
+					Button Box("Clipboard - List",
+						If(Type(val) == "List",
+							copy_to_clipboard(val);
+						,//muuten...
+							copy_to_clipboard(val << get keys);
+						);
+					),
+					Button Box("Clipboard - AA",
+						If(Type(val) == "Associative Array",
+							copy_to_clipboard(val);
+						,//muuten...
+							copy_to_clipboard(Associative Array(val));
+						);
+					),
+					Button Box("Window To SQL",
+						copy_to_clipboard(format_to_sql_in(teb << get text));
+					),
+					Button Box("Close",
+						Current Window() << Close Window;
+					)
+				)
+			)
+		)
+	)
+);
+clb << Set Selected(init_column);
+
+Write();

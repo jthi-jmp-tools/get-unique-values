@@ -1,0 +1,103 @@
+Names Default To Here(1);
+
+get_unique_as_char_from_col = Function({dt, col_name, remove_missing = 0},
+	{Default Local},
+	dt_summary = dt << Summary(Group(Eval(col_name)), Freq("None"), Weight("None"), private);
+	uniq_vals = dt_summary[0, 1];
+	Close(dt_summary, no save);
+	If(remove_missing == 1,
+		Remove From(uniq_vals, Any(Is Missing(uniq_vals)))
+	);
+	Return(uniq_vals);
+);
+
+get_unique_as_aa_from_col = Function({dt, col_name, remove_missing = 0},
+	{Default Local},
+	dt_summary = dt << Summary(Group(Eval(col_name)), Freq("None"), Weight("None"), link to original data table(0), private);
+	Column(dt_summary, 1) << Set Data Type("Character");
+	uniq_vals = dt_summary[0, 1];
+	uniq_counts = dt_summary[0, 2];
+	Close(dt_summary, no save);
+	If(remove_missing == 1,
+		If(Any(Is Missing(uniq_vals)),
+			Remove From(uniq_vals, 1);
+			Remove From(uniq_counts, 1);
+		)
+	);
+	aa_result = Associative Array(Eval List(uniq_vals), Eval List(uniq_counts));
+	Return(aa_result);
+);
+
+
+get_unique_as_sql_in_quoted_from_col = Function({dt, col_name, remove_missing = 1, type = "character"},
+	{Default Local},
+	uniq_vals = get_unique_as_char(dt, col_name, remove_missing);
+	If(
+		Lowercase(type) == "numeric", ret_val = Concat Items("', "),
+		Lowercase(type) == "character", ret_val = "'" || Concat Items("', ") || "'"
+	);
+	Return(ret_val);
+);
+
+build_sql_from_jmp_expr = function({input_data, sql_type = "character"}, {Default Local},
+	If(Type(input_data) == "Associative Array",
+		list_vals = input_data << get keys;
+	,Type(input_data) == "List",
+		list_vals = input_data
+	,
+		list_vals = {};
+	);
+	sql_str = "('" ||Concat Items(list_vals, "', '") ||"')";
+	if(sql_type == "numeric",
+		Substitute Into(sql_str, "'", "");
+	);
+	return(sql_str);
+);
+
+copy_to_clipboard = function({expr_to_copy}, {Default Local},
+	Set Clipboard(expr_to_copy);
+);
+
+format_to_sql_in = function({str}, {Default Local},
+	//row change, ","
+	str = Regex(str, "[\n\r]", ",", GLOBALREPLACE);
+	str = Words(str, ",");
+	str = "('" || Concat Items(str, "', '") || "')";
+	return(str)
+);
+
+get_unique_values = function({input, return_count = 0}, {Default Local},
+	input_type = Type(input);
+	If(Contains({"List", "Matrix"}, input_type),
+		col_type = Type(input[1]);
+		dt = New Table("temp_table", New Column("Column 1", col_type, Set Values(input)), private);
+		ref_col = Column(dt, 1);
+		col_created = 1;
+	,input_type == "Column",
+		ref_col = input;
+		dt = ref_col << Get Data Table;
+	,
+		Throw("Incorrect input type. Must be Column, List or Matrix");
+	);
+	
+	dt_summary = dt << Summary(
+		Group(ref_col),
+		Freq("None"),
+		Weight("None"),
+		statistics column name format("column"),
+		Link to original data table(0),
+		output table name("uniques"),
+		private
+	);
+	
+	Try(Close(dt, no save)); //lazy
+
+	unique_values = dt_summary[0, 1];
+	If(return_count == 1,
+		unique_count = dt_summary[0, 2];
+		Try(Close(dt_summary, no save));
+		return(Eval List({unique_values, unique_count}));
+	);
+	Try(Close(dt_summary, no save));
+	return(unique_values);
+);
