@@ -15,7 +15,7 @@ Select column to see unique values and use buttons to copy them to clipboard in 
 ![startup](images/startup.png)
 
 ### Startup with JSL_aa
-![startup](images/startup.png)
+![startup](images/startup_aa.png)
 
 
 ## Options
