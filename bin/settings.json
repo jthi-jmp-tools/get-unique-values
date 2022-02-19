@@ -1,6 +1,6 @@
 {
 	"GUI":{
 		"window_title": "Get Unique Values",
-		"window_icon": "XmlNodeFillOnce"
+		"window_icon": "CompareData"
 	}
 }

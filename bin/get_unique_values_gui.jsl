@@ -26,6 +26,8 @@ If(N items(list_dt) < 1,
 			New Column("Column 2", Numeric, "Continuous", Format("Best", 12), Set Values([2]))
 		)
 	);
+,
+	no_tables = 0;
 );
 
 init_column = Try(Contains(Datatable(list_dt[1]) << get column names("Ordinal", "Nominal", "String"), (Datatable(list_dt[1]) << Get Selected Columns("String"))[1]), 0);
