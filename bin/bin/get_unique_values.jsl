@@ -43,7 +43,10 @@ build_sql_from_jmp_expr = function({input_data, sql_type = "character"}, {Defaul
 	If(Type(input_data) == "Associative Array",
 		list_vals = input_data << get keys;
 	,Type(input_data) == "List",
-		list_vals = input_data
+		show(list_vals);
+		list_vals = input_data;
+	,Type(input_data) == "Matrix",
+		list_vals = Transform Each({input_val}, AsList(input_data), Char(input_val));
 	,
 		list_vals = {};
 	);
@@ -62,7 +65,8 @@ format_to_sql_in = function({str}, {Default Local},
 	//row change, ","
 	str = Regex(str, "[\n\r]", ",", GLOBALREPLACE);
 	str = Words(str, ",");
-	str = "('" || Concat Items(str, "', '") || "')";
+	str = get_unique_values(str);
+	str = build_sql_from_jmp_expr(str);
 	return(str)
 );
 

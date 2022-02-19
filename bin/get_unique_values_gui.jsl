@@ -16,26 +16,19 @@ check_open_window(aa_settings["GUI"]["window_title"]);
 //check if any tables are open and set current datatable() as dt
 list_dt = Sort List(Get Data Table List() << get name);
 If(N items(list_dt) < 1,
-	New Window("Text to SQL IN", << modal,
-		V List Box(align("center"),
-			Panel Box("Paste text to be converted into sql in",
-				teb = Script Box("", "JSL", 500, 400),
-			),
-			Button Box("Copy as SQL in",
-				copy_to_clipboard(format_to_sql_in(teb << get text));
-			),
-			H List Box(
-				Button Box("OK",
-					copy_to_clipboard(format_to_sql_in(teb << get text));
-				),
-				Button Box("Cancel")
-			)
+	//handling for no tables open
+	no_tables = 1;
+	Insert Into(
+		list_dt,
+		dt_temp = New Table("Temporary empty table",
+			Add Rows(1),
+			New Column("Column 1", Numeric, "Continuous", Format("Best", 12), Set Values([1])),
+			New Column("Column 2", Numeric, "Continuous", Format("Best", 12), Set Values([2]))
 		)
 	);
-	stop();
-	,
-	init_column = Try(Contains(Datatable(list_dt[1]) << get column names("Ordinal", "Nominal", "String"), (Datatable(list_dt[1]) << Get Selected Columns("String"))[1]), 0);
 );
+
+init_column = Try(Contains(Datatable(list_dt[1]) << get column names("Ordinal", "Nominal", "String"), (Datatable(list_dt[1]) << Get Selected Columns("String"))[1]), 0);
 
 update_ui = Expr(
 	col_selection = clb << get selected;
@@ -61,8 +54,7 @@ update_ui = Expr(
 		value_count_teb << Set Text(Char(rows_with_val));
 		missing_count_teb << Set Text(Char(row_count - rows_with_val));
 		missing_percent_teb << Set Text(Char(percent_missing) || "%");
-				
-		//tämä vaatii jonkinlaiset tarkistukset tekstikentän koolle...
+		
 		If(uniq_count > 2000,
 			warning_teb << Set Text("\!NOver 2000 unique values\!Nshowing first 1000 and last 1000");
 			If(Contains({"Matrix", "List"}, Type(val)),
@@ -111,7 +103,7 @@ nw = New Window(aa_settings["GUI"]["window_title"], << show toolbars(0), << show
 				Panel Box("Choose datatable",
 					Lineup Box(N Col(1),
 						lb_dt = List Box(list_dt, max selected(1), << Set Selected(1), << set script(update_clb)),
-						Button Box("Update table list", update_table_list)
+						btn_update_tables = Button Box("Update table list", update_table_list)
 					)
 				),		
 				pb_clb = Panel Box("Select ordinal/nominal column", 
@@ -159,31 +151,60 @@ nw = New Window(aa_settings["GUI"]["window_title"], << show toolbars(0), << show
 					teb = Script Box("", "JSL", 500, 400),
 				)
 			),
-			Panel Box("Actions",
-				Lineup Box(N Col(1),
-					Button Box("Clipboard - SQL char",
-						copy_to_clipboard(build_sql_from_jmp_expr(val, "character"));
+			Lineup Box(N Col(1),
+				Panel Box("Set Clipboard",
+					Lineup Box(N Col(1),
+						Button Box("SQL String",
+							copy_to_clipboard(build_sql_from_jmp_expr(val, "character"));
+						),
+						Button Box("SQL Numeric",
+							copy_to_clipboard(build_sql_from_jmp_expr(val, "numeric"));
+						), //val can be used to access values...
+						Button Box("JMP List",
+							If(Type(val) == "List",
+								copy_to_clipboard(val);
+							,//muuten...
+								copy_to_clipboard(val << get keys);
+							);
+						),
+						Button Box("JMP AA",
+							If(Type(val) == "Associative Array",
+								copy_to_clipboard(val);
+							,//muuten...
+								copy_to_clipboard(Associative Array(val));
+							);
+						),
 					),
-					Button Box("Clipboard - SQL num",
-						copy_to_clipboard(build_sql_from_jmp_expr(val, "numeric"));
-					), //val can be used to access values...
-					Button Box("Clipboard - List",
-						If(Type(val) == "List",
-							copy_to_clipboard(val);
-						,//muuten...
-							copy_to_clipboard(val << get keys);
-						);
-					),
-					Button Box("Clipboard - AA",
-						If(Type(val) == "Associative Array",
-							copy_to_clipboard(val);
-						,//muuten...
-							copy_to_clipboard(Associative Array(val));
-						);
-					),
-					Button Box("Window To SQL",
-						copy_to_clipboard(format_to_sql_in(teb << get text));
-					),
+				),
+				Panel Box("To Clipboard",
+					Lineup Box(N Col(1),
+						Button Box("Window To SQL",
+							text_to_format = teb << get text;
+							If(!IsMissing(text_to_format),
+								Try(
+									text_to_clipboard = format_to_sql_in(text_to_format);
+									copy_to_clipboard(text_to_clipboard);
+									teb << Set Text(text_to_clipboard);
+								,
+									Show(exception_msg);
+								);
+							);
+						),
+						Button Box("Clipboard To SQL",
+							text_to_format = Get Clipboard();
+							If(!IsMissing(Trim Whitespace(text_to_format)),
+								Try(
+									text_to_clipboard = format_to_sql_in(text_to_format);
+									copy_to_clipboard(text_to_clipboard);
+									teb << Set Text(text_to_clipboard);
+								,
+									Show(exception_msg);
+								);
+							);
+						)
+					)
+				),
+				Panel Box("Close",
 					Button Box("Close",
 						Current Window() << Close Window;
 					)
@@ -194,4 +215,8 @@ nw = New Window(aa_settings["GUI"]["window_title"], << show toolbars(0), << show
 );
 clb << Set Selected(init_column);
 
+If(no_tables == 1,
+	Try(Close(dt_temp, no save));
+	btn_update_tables << click(1);
+);
 Write();
